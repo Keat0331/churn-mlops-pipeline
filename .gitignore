@@ -1,0 +1,20 @@
+# Python junk
+__pycache__/
+*.py[cod]
+*$py.class
+.venv
+env/
+venv/
+
+# Docker junk
+postgres_data/
+
+# Mac junk
+.DS_Store
+
+# IDE junk
+.vscode/
+.idea/
+
+# Optional: Ignore data if it's huge (keep it for now if <100MB so recruiters can run it)
+# data/
