@@ -16,5 +16,7 @@ postgres_data/
 .vscode/
 .idea/
 
-# Optional: Ignore data if it's huge (keep it for now if <100MB so recruiters can run it)
-# data/
+# Artifacts & Temp files
+*.png
+*.jpg
+mlruns/
