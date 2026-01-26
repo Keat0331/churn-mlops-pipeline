@@ -1,14 +1,14 @@
 import mlflow
 import pandas as pd
+import sys
 
-# 1. Simulate "Live" Data (Raw, unscaled, categorical strings)
-# This mimics a JSON payload from a frontend website
+# 1. Simulate "Live" Data
 live_data = pd.DataFrame([{
     'gender': 'Female',
     'SeniorCitizen': 0,
     'Partner': 'Yes',
     'Dependents': 'No',
-    'tenure': 1,  # New customer
+    'tenure': 1,
     'PhoneService': 'No',
     'MultipleLines': 'No phone service',
     'InternetService': 'DSL',
@@ -22,20 +22,29 @@ live_data = pd.DataFrame([{
     'PaperlessBilling': 'Yes',
     'PaymentMethod': 'Electronic check',
     'MonthlyCharges': 29.85,
-    'TotalCharges': 29.85 # or " "
+    'TotalCharges': 29.85
 }])
 
-# 2. Load the Model from MLflow
-# Note: In production, you'd use the "Model Registry" URI models:/ChurnModel/Production
-# For now, we load the latest run from your local folder
-# You need the RUN_ID from your MLflow UI (e.g., "8d233...")
-logged_model = 'runs:/204c7626d6104983a18990a1b73fc1cf/churn_model'
+# 2. Load from Registry using Alias
+# We use the alias 'staging' which we set in register.py
+# This ensures we always get the latest approved model without changing code.
+model_name = "Telco_Churn_Model"
+alias = "staging"
 
-print(f"Loading model from {logged_model}...")
-loaded_model = mlflow.pyfunc.load_model(logged_model)
+model_uri = f"models:/{model_name}@{alias}"
+
+print(f"Loading model from Registry: {model_uri}...")
+
+try:
+    loaded_model = mlflow.pyfunc.load_model(model_uri)
+    print("✅ Model loaded successfully.")
+except Exception as e:
+    print(f"❌ Failed to load model. Did you run the 'register_model' task successfully?")
+    print(f"Error: {e}")
+    sys.exit(1)
 
 # 3. Predict
-# Notice we pass the RAW live_data. The pipeline handles the scaling/encoding!
 prediction = loaded_model.predict(live_data)
+result = 'Yes' if prediction[0] == 1 else 'No'
 
-print(f"Will this customer churn? {'Yes' if prediction[0] == 1 else 'No'}")
+print(f"Will this customer churn? {result}")

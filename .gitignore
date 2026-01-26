@@ -5,6 +5,8 @@ __pycache__/
 .venv
 env/
 venv/
+latest_run_id.txt
+data/processed/
 
 # Security (CRITICAL)
 .env
