@@ -1,44 +1,75 @@
-# 🚀 End-to-End MLOps Pipeline: Customer Churn Prediction
+# 🚀 End-to-End Cloud Native MLOps Pipeline
 
 ## Overview
-A production-grade MLOps pipeline designed to predict customer churn. Unlike standard tutorials, this project simulates a real-world environment by implementing **automated orchestration**, **schema enforcement**, and **deployment simulation**. 
+A production-grade MLOps platform designed to predict customer churn. This project demonstrates a complete "Local-to-Cloud" workflow, simulating a real-world enterprise environment.
 
-It uses **Apache Airflow** to manage the lifecycle and **MLflow** for experiment tracking and model registry.
+It features **automated orchestration** (Airflow), **experiment tracking** (MLflow), and **infrastructure as code** (Kubernetes & Docker Compose), with a strong focus on security (Secret Management) and reliability (Self-Healing Infrastructure).
+
+
 
 ## 🛠️ Tech Stack & Architecture
-* **Orchestration:** Apache Airflow (Dockerized)
-* **Experiment Tracking:** MLflow (Artifacts, Metrics, Signatures)
+* **Orchestration:** Apache Airflow (Dockerized with Init Containers)
+* **Experiment Tracking:** MLflow (Artifacts, Metrics, Model Registry)
 * **Model Serving:** Scikit-Learn Pipelines (Preprocessing + Inference)
-* **Infrastructure:** Docker Compose (Multi-container setup with Postgres backend)
-* **Visualization:** Matplotlib & Seaborn (Automated Feature Importance generation)
+* **Infrastructure:** Kubernetes (Minikube/GKE) & Docker Compose
+* **Security:** Environment Variables & Kubernetes Secrets (Base64 Encoded)
+* **Backend:** PostgreSQL (Multi-database architecture)
 
 ## 🌟 Key Features
-* **Production-Ready Preprocessing:** Implements `sklearn.pipeline` to bake data cleaning (OneHotEncoding, Scaling) into the model artifact. This prevents "training-serving skew."
+* **Hybrid Infrastructure:** Supports both lightweight local development (Docker Compose) and scalable production deployment (Kubernetes).
+* **Production-Ready Preprocessing:** Implements `sklearn.pipeline` to bake data cleaning (OneHotEncoding, Scaling) into the model artifact to prevent training-serving skew.
+* **Self-Healing Deployments:** Utilizes Kubernetes `livenessProbes` and `initContainers` to resolve race conditions and ensure zero-downtime restarts.
 * **Schema Enforcement:** Uses MLflow signatures to strictly define input types, ensuring the model rejects malformed data in production.
 * **Automated Reporting:** Automatically generates and logs "Feature Importance" plots for every training run.
-* **Deployment Verification:** Includes a `test_deployment.py` script that simulates a REST API call with raw JSON input to verify the model is ready for live traffic.
 
-## 💻 How to Run
-1.  **Clone the repo:**
+## ⚙️ Configuration
+**Security Note:** This project uses a `.env` file to manage secrets.
+1.  Create a `.env` file in the root directory.
+2.  Add the following credentials (do not commit this file to Git):
     ```bash
-    git clone [https://github.com/](https://github.com/)[YOUR_USERNAME]/churn-mlops-pipeline.git
-    cd churn-mlops-pipeline
+    POSTGRES_USER=user
+    POSTGRES_PASSWORD=password
+    POSTGRES_DB=airflow_db
+    AIRFLOW_ADMIN_USER=admin
+    AIRFLOW_ADMIN_PASS=admin
+    AIRFLOW_ADMIN_EMAIL=admin@example.com
+    DB_HOST=postgres
+    DB_PORT=5432
     ```
-2.  **Start the infrastructure:**
+
+## 💻 How to Run (Local Dev)
+1.  **Start the infrastructure:**
     ```bash
     docker-compose up --build
     ```
-3.  **Access Dashboards:**
-    * **Airflow:** http://localhost:8081 (User: `admin` / Pass: `admin`)
+2.  **Access Dashboards:**
+    * **Airflow:** http://localhost:8081 (User/Pass from `.env`)
     * **MLflow:** http://localhost:5000
-4.  **Trigger the Pipeline:**
+3.  **Trigger the Pipeline:**
     * Enable the `churn_retraining_pipeline` DAG in Airflow.
-    * Watch the pipeline ingest data, train the model, and log artifacts to MLflow.
+
+## ☸️ Kubernetes Deployment (Production)
+This project includes full Kubernetes manifests for deployment on GKE or Minikube.
+1.  **Apply Secrets & Configs:**
+    ```bash
+    kubectl apply -f kubernetes/0-secrets.yaml
+    kubectl apply -f kubernetes/1-postgres.yaml
+    ```
+2.  **Deploy Services:**
+    ```bash
+    kubectl apply -f kubernetes/2-mlflow.yaml
+    kubectl apply -f kubernetes/3-airflow.yaml
+    ```
+3.  **Access Services (NodePort):**
+    ```bash
+    minikube service airflow --url
+    minikube service mlflow --url
+    ```
 
 ## 🧪 Verifying Deployment
 To simulate a live API request, run the test script inside the container:
 ```bash
-# Get the container ID/Name first (usually churn-mlops-pipeline-airflow-run-1)
+# Get the container ID/Name first
 docker exec -it [CONTAINER_NAME] python /opt/airflow/scripts/test_deployment.py
 ```
 

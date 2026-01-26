@@ -6,6 +6,9 @@ __pycache__/
 env/
 venv/
 
+# Security (CRITICAL)
+.env
+
 # Docker junk
 postgres_data/
 
@@ -20,3 +23,7 @@ postgres_data/
 *.png
 *.jpg
 mlruns/
+
+# Kubernetes & Local Binaries
+minikube-linux-amd64
+kubectl

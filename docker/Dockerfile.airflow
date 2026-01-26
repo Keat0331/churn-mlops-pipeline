@@ -1,5 +1,11 @@
 FROM apache/airflow:2.9.1
 
-# Copy requirements and install them globally
+# 1. Install libraries
 COPY requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt
+
+# 2. BAKE THE CODE IN (New Step!)
+# We copy local folders to the container's standard locations
+COPY --chown=airflow:root dags/ /opt/airflow/dags/
+COPY --chown=airflow:root scripts/ /opt/airflow/scripts/
+COPY --chown=airflow:root data/ /opt/airflow/data/

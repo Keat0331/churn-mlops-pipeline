@@ -1,15 +1,17 @@
-version: '3'
+version: '3.8'  # Upgrade to 3.8 for better features
+
 services:
   postgres:
     image: postgres:13
     environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      # We don't need POSTGRES_DB because our init.sql creates multiple DBs
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "user"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
       interval: 5s
       retries: 5
 
@@ -18,32 +20,35 @@ services:
       context: .
       dockerfile: docker/Dockerfile.mlflow
     restart: always
+    environment:
+      - BACKEND_STORE_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${DB_PORT}/mlflow_db
+    # We use 'sh -c' to expand the environment variable inside the container command
     command: >
-      mlflow server
-      --backend-store-uri postgresql://user:password@postgres:5432/mlflow_db
+      sh -c "mlflow server
+      --backend-store-uri $${BACKEND_STORE_URI}
       --host 0.0.0.0
-      --port 5000
+      --port 5000"
     ports:
       - "5000:5000"
     depends_on:
       postgres:
         condition: service_healthy
 
-  # --- NEW SERVICE: Only runs DB migrations ---
   airflow-init:
     build:
       context: .
       dockerfile: docker/Dockerfile.airflow
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://user:password@postgres:5432/airflow_db
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${DB_PORT}/airflow_db
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
-    command: bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Peter --lastname Pan --role Admin --email admin@example.com"
+      - _AIRFLOW_WWW_USER_USERNAME=${AIRFLOW_ADMIN_USER}
+      - _AIRFLOW_WWW_USER_PASSWORD=${AIRFLOW_ADMIN_PASS}
+    command: bash -c "airflow db migrate && airflow users create --username $${_AIRFLOW_WWW_USER_USERNAME} --password $${_AIRFLOW_WWW_USER_PASSWORD} --firstname Peter --lastname Pan --role Admin --email ${AIRFLOW_ADMIN_EMAIL}"
     depends_on:
       postgres:
         condition: service_healthy
 
-  # --- MAIN SERVICE: Runs Webserver & Scheduler ---
   airflow-run:
     build:
       context: .
@@ -51,9 +56,15 @@ services:
     restart: always
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://user:password@postgres:5432/airflow_db
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${DB_PORT}/airflow_db
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - MLFLOW_TRACKING_URI=http://mlflow:5000
+    # PRO TIP: Best Practice for Hybrid Development
+    # Even though your Dockerfile 'COPY's the code, we KEEP these volumes.
+    # Why?
+    # 1. In Production (Kubernetes): The code is baked in (Immutable).
+    # 2. In Local (Compose): These volumes OVERWRITE the baked code with your live local files.
+    # This gives you "Hot Reload" locally, but "Stability" in Prod.
     volumes:
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
@@ -63,7 +74,7 @@ services:
     command: bash -c "airflow webserver & airflow scheduler"
     depends_on:
       airflow-init:
-        condition: service_completed_successfully  # <--- MAGIC LINE: Waits for init to finish!
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
