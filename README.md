@@ -1,3 +1,10 @@
+Here is the updated `README.md`.
+
+It now includes a dedicated section for **Google Kubernetes Engine (GKE)** deployment, detailing every step we took: setting up the Artifact Registry, building/pushing images, granting IAM permissions, and port forwarding. I also highlighted specifically where to modify the YAML files.
+
+### Updated `README.md`
+
+```markdown
 # 🚀 End-to-End Cloud Native MLOps Pipeline
 
 ## Overview
@@ -48,18 +55,17 @@ It features **automated orchestration** (Airflow), **experiment tracking** (MLfl
     * Enable the `churn_modular_pipeline` DAG in Airflow.
     * Watch the tasks flow from Data Ingestion $\rightarrow$ Training $\rightarrow$ Model Registration.
 
-## ☸️ Kubernetes Deployment (Production)
+## ☸️ Kubernetes Deployment (Local / Minikube)
+This project includes full Kubernetes manifests for deployment on Minikube.
 
-This project includes full Kubernetes manifests for deployment on GKE or Minikube.
-
-### Prerequisites (Minikube Only)
+### Prerequisites
 If running locally on Minikube, you must build the images **inside** the Minikube environment so the cluster can access them.
 
 1.  **Point your shell to Minikube's Docker daemon:**
     ```bash
     eval $(minikube docker-env)
     ```
-2.  **Build the production images:**
+2.  **Build the images:**
     ```bash
     docker build -t churn-airflow:v1 -f docker/Dockerfile.airflow .
     docker build -t churn-mlflow:v1 -f docker/Dockerfile.mlflow .
@@ -76,44 +82,148 @@ If running locally on Minikube, you must build the images **inside** the Minikub
     kubectl apply -f kubernetes/2-mlflow.yaml
     kubectl apply -f kubernetes/3-airflow.yaml
     ```
-    *Note: If updating code, run `kubectl delete pods -l app=airflow` to force a restart with the new image.*
-
 3.  **Access Services:**
     ```bash
     minikube service airflow --url
     minikube service mlflow --url
     ```
 
+## ☁️ Google Kubernetes Engine (GKE) Deployment
+This section details how to deploy this project to the cloud (GCP).
+
+### 1. Prerequisites & Setup
+* **Google Cloud CLI** installed and authenticated (`gcloud init`).
+* **Billing Enabled** on your GCP Project.
+* **APIs Enabled:** Kubernetes Engine, Artifact Registry, Compute Engine.
+
+### 2. Create Cloud Infrastructure
+```bash
+# 1. Create Artifact Registry (to store Docker images)
+gcloud artifacts repositories create churn-repo \
+    --repository-format=docker \
+    --location=asia-southeast1 \
+    --description="MLOps Docker Repository"
+
+# 2. Configure Docker Auth
+gcloud auth configure-docker asia-southeast1-docker.pkg.dev
+
+# 3. Create GKE Cluster
+gcloud container clusters create churn-cluster \
+    --zone asia-southeast1-a \
+    --num-nodes 1 \
+    --machine-type e2-standard-4
+
+# 4. Connect kubectl to the cluster
+gcloud container clusters get-credentials churn-cluster --zone asia-southeast1-a
+
+```
+
+### 3. Build & Push Images
+
+Replace `[PROJECT_ID]` with your actual GCP Project ID.
+
+```bash
+# Build & Push Airflow
+docker build -t asia-southeast1-docker.pkg.dev/[PROJECT_ID]/churn-repo/churn-airflow:v1 -f docker/Dockerfile.airflow .
+docker push asia-southeast1-docker.pkg.dev/[PROJECT_ID]/churn-repo/churn-airflow:v1
+
+# Build & Push MLflow
+docker build -t asia-southeast1-docker.pkg.dev/[PROJECT_ID]/churn-repo/churn-mlflow:v1 -f docker/Dockerfile.mlflow .
+docker push asia-southeast1-docker.pkg.dev/[PROJECT_ID]/churn-repo/churn-mlflow:v1
+
+```
+
+### 4. Update YAML Manifests
+
+Before deploying, you must update the `image:` field in your YAML files to point to the new Artifact Registry URL.
+
+* **`kubernetes/3-airflow.yaml`**: Update **both** the `initContainer` and `main container` image paths.
+* **`kubernetes/2-mlflow.yaml`**: Update the container image path.
+* **Change Policy:** Ensure `imagePullPolicy: Always` is set.
+
+### 5. IAM Permissions (Critical Step)
+
+Grant the GKE Service Account permission to pull images from Artifact Registry.
+
+```bash
+# 1. Get Service Account Email
+SA_EMAIL=$(gcloud iam service-accounts list --filter="name:'Compute Engine default service account'" --format="value(email)")
+
+# 2. Grant Reader Role
+gcloud projects add-iam-policy-binding [PROJECT_ID] \
+    --member=serviceAccount:$SA_EMAIL \
+    --role=roles/artifactregistry.reader
+
+```
+
+### 6. Deploy & Access
+
+```bash
+# Deploy to GKE
+kubectl apply -f kubernetes/
+
+# Access via Port Forwarding (Recommended for Demo)
+kubectl port-forward svc/airflow 8081:8080
+kubectl port-forward svc/mlflow 5000:5000
+
+```
+
 ## 🧪 Verifying Deployment (Continuous Delivery)
+
 This project uses **MLflow Model Registry Aliases**. The test script automatically loads the model tagged as `@staging`, eliminating the need to hardcode Run IDs.
 
 ### Option A: Local (Docker Compose)
+
 To simulate a live API request in your local environment:
+
 ```bash
 # 1. Get the container name
 docker ps --filter "name=airflow-run"
 
 # 2. Run the test script inside the container
 docker exec -it [CONTAINER_NAME] python /opt/airflow/scripts/test_deployment.py
+
 ```
 
 ### Option B: Production (Kubernetes)
+
 To verify the model inside the Kubernetes cluster:
 
-1. Copy the updated script: (Since the Docker image is immutable, we copy the latest local test script—which uses the registry alias—into the running pod).
+1. **Copy the updated script:**
+(Since the Docker image is immutable, we copy the latest local test script—which uses the registry alias—into the running pod).
 ```bash
 # Get the Airflow pod name
 kubectl get pods -l app=airflow
 
 # Copy the script
 kubectl cp scripts/test_deployment.py [POD_NAME]:/opt/airflow/scripts/test_deployment.py
-```
-2. Execute the Test
-```bash
-kubectl exec -it [POD_NAME] -- python /opt/airflow/scripts/test_deployment.py
+
 ```
 
-## 📊 Result: Returns a prediction (Churn: Yes/No) using the latest trained model registry.
+
+2. **Execute the Test:**
+```bash
+kubectl exec -it [POD_NAME] -- python /opt/airflow/scripts/test_deployment.py
+
+```
+
+
+
+**Expected Output:**
+
+```text
+Loading model from Registry: models:/Telco_Churn_Model@staging...
+✅ Model loaded successfully.
+Will this customer churn? No
+
+```
+
+## 📊 Results
+
 * Achieved ~81% accuracy on the Telco Churn dataset.
 * Full lineage tracking available in MLflow.
 * Automated promotion of valid models to the "Staging" registry alias.
+
+```
+
+```
