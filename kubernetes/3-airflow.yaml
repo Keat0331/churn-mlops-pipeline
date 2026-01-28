@@ -13,7 +13,7 @@ spec:
         app: airflow
     spec:
 
-      # --- NEW: Permission Fixer (Runs as Root) ---
+      # --- 1. Init Container ---
       initContainers:
       - name: fix-permissions
         image: busybox
@@ -22,9 +22,7 @@ spec:
         - name: artifacts-volume
           mountPath: /mlartifacts
       # --------------------------------------------
-
-      # --- 1. Init Container (Runs Migration First) ---
-      initContainers:
+      
       - name: airflow-migration
         image: churn-airflow:v1
         imagePullPolicy: Never

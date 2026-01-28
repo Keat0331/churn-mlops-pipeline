@@ -155,6 +155,10 @@ docker push asia-southeast1-docker.pkg.dev/[PROJECT_ID]/churn-repo/churn-airflow
 docker build -t asia-southeast1-docker.pkg.dev/[PROJECT_ID]/churn-repo/churn-mlflow:v1 -f docker/Dockerfile.mlflow .
 docker push asia-southeast1-docker.pkg.dev/[PROJECT_ID]/churn-repo/churn-mlflow:v1
 
+# Build & Push API (Model Serving)
+docker build -t asia-southeast1-docker.pkg.dev/[PROJECT_ID]/churn-repo/churn-api:v1 -f docker/Dockerfile.api .
+docker push asia-southeast1-docker.pkg.dev/[PROJECT_ID]/churn-repo/churn-api:v1
+
 ```
 
 ### 4. Update YAML Manifests
@@ -163,6 +167,7 @@ Before deploying, you must update the `image:` field in your YAML files to point
 
 * **`kubernetes/3-airflow.yaml`**: Update **both** the `initContainer` and `main container` image paths.
 * **`kubernetes/2-mlflow.yaml`**: Update the container image path.
+* **`kubernetes/4-api.yaml`**: Update the container image path.
 * **Change Policy:** Ensure `imagePullPolicy: Always` is set.
 
 ### 5. IAM Permissions (Critical Step)
@@ -189,57 +194,31 @@ kubectl apply -f kubernetes/
 # Access via Port Forwarding (Recommended for Demo)
 kubectl port-forward svc/airflow 8081:8080
 kubectl port-forward svc/mlflow 5000:5000
+kubectl port-forward svc/api 8000:8000
 
 ```
 
 ## 🧪 Verifying Deployment (Continuous Delivery)
 
-This project uses **MLflow Model Registry Aliases**. The test script automatically loads the model tagged as `@staging`, eliminating the need to hardcode Run IDs.
-
-### Option A: Local (Docker Compose)
-
-To simulate a live API request in your local environment:
+To verify the serving layer is working (works for both Local and Kubernetes):
 
 ```bash
-# 1. Get the container name
-docker ps --filter "name=airflow-run"
-
-# 2. Run the test script inside the container
-docker exec -it [CONTAINER_NAME] python /opt/airflow/scripts/test_deployment.py
-
+curl -X 'POST' 'http://localhost:8000/predict' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "gender": "Female", "SeniorCitizen": 0, "Partner": "Yes", "Dependents": "No",
+  "tenure": 1, "PhoneService": "No", "MultipleLines": "No phone service",
+  "InternetService": "DSL", "OnlineSecurity": "No", "OnlineBackup": "Yes",
+  "DeviceProtection": "No", "TechSupport": "No", "StreamingTV": "No",
+  "StreamingMovies": "No", "Contract": "Month-to-month", "PaperlessBilling": "Yes",
+  "PaymentMethod": "Electronic check", "MonthlyCharges": 29.85, "TotalCharges": 29.85
+}'
 ```
-
-### Option B: Production (Kubernetes)
-
-To verify the model inside the Kubernetes cluster:
-
-1. **Copy the updated script:**
-(Since the Docker image is immutable, we copy the latest local test script—which uses the registry alias—into the running pod).
-```bash
-# Get the Airflow pod name
-kubectl get pods -l app=airflow
-
-# Copy the script
-kubectl cp scripts/test_deployment.py [POD_NAME]:/opt/airflow/scripts/test_deployment.py
-
-```
-
-
-2. **Execute the Test:**
-```bash
-kubectl exec -it [POD_NAME] -- python /opt/airflow/scripts/test_deployment.py
-
-```
-
-
 
 **Expected Output:**
 
-```text
-Loading model from Registry: models:/Telco_Churn_Model@staging...
-✅ Model loaded successfully.
-Will this customer churn? No
-
+```json
+{"churn_prediction": "No"}
 ```
 
 ## 📊 Results
