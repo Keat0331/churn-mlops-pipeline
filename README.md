@@ -86,23 +86,30 @@ If running locally on Minikube, you must build the images **inside** the Minikub
     ```bash
     docker build -t churn-airflow:v1 -f docker/Dockerfile.airflow .
     docker build -t churn-mlflow:v1 -f docker/Dockerfile.mlflow .
+    docker build -t churn-api:v1 -f docker/Dockerfile.api .
     ```
 
 ### Deployment Steps
-1.  **Apply Secrets & Configs:**
+1.  **Apply Secrets & Storage:**
     ```bash
     kubectl apply -f kubernetes/0-secrets.yaml
+    kubectl apply -f kubernetes/0-pvc-artifacts.yaml
+    ```
+1.  **Deploy Database:**
+    ```bash
     kubectl apply -f kubernetes/1-postgres.yaml
     ```
-2.  **Deploy Services:**
+2.  **Deploy Services (Tracking, Orchestration, Serving)::**
     ```bash
     kubectl apply -f kubernetes/2-mlflow.yaml
     kubectl apply -f kubernetes/3-airflow.yaml
+    kubectl apply -f kubernetes/4-api.yaml
     ```
-3.  **Access Services:**
+3.  **Access Services (Port Forwarding):**
     ```bash
-    minikube service airflow --url
-    minikube service mlflow --url
+    kubectl port-forward svc/airflow 8081:8080
+    kubectl port-forward svc/mlflow 5000:5000
+    kubectl port-forward svc/api 8000:8000
     ```
 
 ## ☁️ Google Kubernetes Engine (GKE) Deployment

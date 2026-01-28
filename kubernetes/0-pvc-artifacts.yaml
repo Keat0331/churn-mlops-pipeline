@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-artifacts-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce  # Fine for Minikube (Single Node)
+  resources:
+    requests:
+      storage: 1Gi

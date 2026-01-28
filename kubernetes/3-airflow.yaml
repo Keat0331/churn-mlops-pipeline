@@ -12,6 +12,17 @@ spec:
       labels:
         app: airflow
     spec:
+
+      # --- NEW: Permission Fixer (Runs as Root) ---
+      initContainers:
+      - name: fix-permissions
+        image: busybox
+        command: ["sh", "-c", "chown -R 50000:0 /mlartifacts && chmod -R 777 /mlartifacts"]
+        volumeMounts:
+        - name: artifacts-volume
+          mountPath: /mlartifacts
+      # --------------------------------------------
+
       # --- 1. Init Container (Runs Migration First) ---
       initContainers:
       - name: airflow-migration
@@ -44,6 +55,9 @@ spec:
           value: "http://mlflow:5000"
         ports:
         - containerPort: 8080
+        volumeMounts:
+        - name: artifacts-volume
+          mountPath: /mlartifacts
         
         # Liveness Probe: Checks if the webserver port is open
         livenessProbe:
@@ -53,6 +67,11 @@ spec:
           periodSeconds: 20
           
         command: ["bash", "-c", "airflow webserver & airflow scheduler"]
+        
+      volumes:
+      - name: artifacts-volume
+        persistentVolumeClaim:
+          claimName: model-artifacts-pvc
 ---
 apiVersion: v1
 kind: Service
