@@ -1,31 +1,24 @@
-Here is the updated `README.md`.
-
-It now includes a dedicated section for **Google Kubernetes Engine (GKE)** deployment, detailing every step we took: setting up the Artifact Registry, building/pushing images, granting IAM permissions, and port forwarding. I also highlighted specifically where to modify the YAML files.
-
-### Updated `README.md`
-
-```markdown
 # 🚀 End-to-End Cloud Native MLOps Pipeline
 
 ## Overview
 A production-grade MLOps platform designed to predict customer churn. This project demonstrates a complete "Local-to-Cloud" workflow, simulating a real-world enterprise environment.
 
-It features **automated orchestration** (Airflow), **experiment tracking** (MLflow), and **infrastructure as code** (Kubernetes & Docker Compose), with a strong focus on security (Secret Management) and reliability (Self-Healing Infrastructure).
+It features **automated orchestration** (Airflow), **experiment tracking** (MLflow), **real-time model serving** (FastAPI), and **infrastructure as code** (Kubernetes & Docker Compose).
 
 ## 🛠️ Tech Stack & Architecture
 * **Orchestration:** Apache Airflow (Dockerized with Init Containers)
 * **Experiment Tracking:** MLflow (Artifacts, Metrics, Model Registry)
-* **Model Serving:** Scikit-Learn Pipelines (Preprocessing + Inference)
+* **Model Serving:** FastAPI (Real-time REST API)
 * **Infrastructure:** Kubernetes (Minikube/GKE) & Docker Compose
 * **Security:** Environment Variables & Kubernetes Secrets (Base64 Encoded)
 * **Backend:** PostgreSQL (Multi-database architecture)
 
 ## 🌟 Key Features
-* **Modular Pipeline Architecture:** Decoupled DAG (Preprocess $\rightarrow$ Train $\rightarrow$ Register) using intermediate Parquet storage. This ensures fault tolerance and easier debugging.
-* **Hybrid Infrastructure:** Supports both lightweight local development (Docker Compose) and scalable production deployment (Kubernetes).
+* **Microservice Architecture:** Decoupled services (Training, Tracking, Serving) communicating via shared Docker volumes and REST APIs.
+* **Real-Time Inference:** A dedicated **FastAPI** container that dynamically loads the latest `@staging` model from the shared volume to serve predictions via a REST endpoint.
+* **Modular Pipeline:** Decoupled DAG (Preprocess $\rightarrow$ Train $\rightarrow$ Register) using intermediate Parquet storage for fault tolerance.
 * **Production-Ready Preprocessing:** Implements `sklearn.pipeline` to bake data cleaning (OneHotEncoding, Scaling) into the model artifact to prevent training-serving skew.
-* **Self-Healing Deployments:** Utilizes Kubernetes `livenessProbes` and `initContainers` to resolve race conditions and ensure zero-downtime restarts.
-* **Schema Enforcement:** Uses MLflow signatures to strictly define input types, ensuring the model rejects malformed data in production.
+* **Self-Healing Infrastructure:** Utilizes `fix-permissions` containers and `livenessProbes` to resolve Docker volume permission issues and race conditions automatically.
 * **Automated Governance:** Implements a "Gatekeeper" script that only registers models to the **Staging** alias if they meet accuracy thresholds.
 
 ## ⚙️ Configuration
@@ -48,12 +41,36 @@ It features **automated orchestration** (Airflow), **experiment tracking** (MLfl
     ```bash
     docker-compose up --build
     ```
+    *(Note: A `fix-permissions` container will run briefly to ensure Airflow and MLflow can share the artifact volume).*
+
 2.  **Access Dashboards:**
     * **Airflow:** http://localhost:8081 (User/Pass from `.env`)
     * **MLflow:** http://localhost:5000
+    * **API Docs:** http://localhost:8000/docs
+
 3.  **Trigger the Pipeline:**
     * Enable the `churn_modular_pipeline` DAG in Airflow.
-    * Watch the tasks flow from Data Ingestion $\rightarrow$ Training $\rightarrow$ Model Registration.
+    * Wait for the `train` task to complete. This saves the model to the shared volume.
+
+4.  **Test the API (Real-Time Prediction):**
+    * Since the API loads the model on startup, if you trained a new model, restart the API:
+      ```bash
+      docker-compose restart api
+      ```
+    * Send a test request:
+      ```bash
+      curl -X 'POST' 'http://localhost:8000/predict' \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "gender": "Female", "SeniorCitizen": 0, "Partner": "Yes", "Dependents": "No",
+        "tenure": 1, "PhoneService": "No", "MultipleLines": "No phone service",
+        "InternetService": "DSL", "OnlineSecurity": "No", "OnlineBackup": "Yes",
+        "DeviceProtection": "No", "TechSupport": "No", "StreamingTV": "No",
+        "StreamingMovies": "No", "Contract": "Month-to-month", "PaperlessBilling": "Yes",
+        "PaymentMethod": "Electronic check", "MonthlyCharges": 29.85, "TotalCharges": 29.85
+      }'
+      ```
+      **Response:** `{"churn_prediction": "No"}`
 
 ## ☸️ Kubernetes Deployment (Local / Minikube)
 This project includes full Kubernetes manifests for deployment on Minikube.
